@@ -2,7 +2,7 @@
 Base64 Encoder/Decoder C Routines
 
 ## Status
-Encoder complete but without unit tests. Decoder not yet implemented.
+Complete but only informally tested.
 
 ## License
 Copyright (c) 2019 Matthew T. Bucknall
