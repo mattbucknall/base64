@@ -25,9 +25,10 @@
 
 #include "base64.h"
 
-#include <stdio.h>
+
 size_t base64_buffer_size_to_raw_buffer_size(size_t size)
 {
+    // TODO!
     return 0;
 }
 
