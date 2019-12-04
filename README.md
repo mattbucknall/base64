@@ -1,6 +1,9 @@
 # Base64
 Base64 Encoder/Decoder C Routines
 
+## Status
+Encoder complete but without unit tests. Decoder not yet implemented.
+
 ## License
 Copyright (c) 2019 Matthew T. Bucknall
 
