@@ -23,132 +23,226 @@
  * IN THE SOFTWARE.
  */
 
+#include <assert.h>
+
 #include "base64.h"
 
 
-size_t base64_buffer_size_to_raw_buffer_size(size_t size)
+static const char ENC_LUT[64] =
 {
-    // TODO!
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+    'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+    'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+    'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+    'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+    'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+    'w', 'x', 'y', 'z', '0', '1', '2', '3',
+    '4', '5', '6', '7', '8', '9', '+', '/'
+};
+
+
+void base64_encoder_init(base64_encoder_t* encoder, const base64_encoder_options_t* options, void* user_data)
+{
+    assert(encoder);
+    assert(options);
+
+    encoder->options = options;
+    encoder->user_data = user_data;
+    encoder->n_pending = 0;
+    encoder->line_length = 0;
+}
+
+
+int base64_encoder_write(base64_encoder_t* encoder, const void* buffer, size_t length)
+{
+    assert(encoder);
+    assert(buffer || length == 0);
+
+    int result;
+    const uint8_t* in_i = buffer;
+    const uint8_t* in_e = in_i + length;
+    uint8_t* pending = encoder->pending;
+    char out[5];
+
+    out[4] = '\n';
+
+    while (in_i < in_e)
+    {
+        uint8_t byte = *in_i++;
+
+        pending[encoder->n_pending++] = byte;
+
+        if ( encoder->n_pending == 3 )
+        {
+            unsigned int out_len = 4;
+
+            if ( encoder->options->max_line_length > 0 )
+            {
+                encoder->line_length += 4;
+
+                if ( encoder->line_length >= encoder->options->max_line_length )
+                {
+                    encoder->line_length = 0;
+                    out_len = 5;
+                }
+            }
+
+            out[0] = ENC_LUT[pending[0] >> 2u];
+            out[1] = ENC_LUT[((pending[0] & 0x03u) << 4u) | (pending[1] >> 4u)];
+            out[2] = ENC_LUT[((pending[1] & 0x0fu) << 2u) | (pending[2] >> 6u)];
+            out[3] = ENC_LUT[pending[2] & 0x3Fu];
+
+            result = encoder->options->write_func(out, out_len, encoder->user_data);
+            if ( result < 0 ) return result;
+
+            encoder->n_pending = 0;
+        }
+    }
+
     return 0;
 }
 
 
-size_t base64_buffer_size_from_raw_buffer_size(size_t size, const base64_options_t* options)
+int base64_encoder_finish(base64_encoder_t* encoder)
 {
-    size *= 8;
-    size = (size + 5) / 6;
-    size = (size + 3) / 4;
-    size *= 4;
+    assert(encoder);
 
-    if ( options )
+    uint8_t* pending = encoder->pending;
+    char out[6];
+    char* out_i = out;
+
+    if ( encoder->n_pending > 0 )
     {
-        if ( options->with_lines ) size += (size + 71) / 72;
-        if ( options->null_terminate ) size += 1;
-    }
+        *out_i++ = ENC_LUT[pending[0] >> 2u];
 
-    return size;
-}
-
-
-base64_result_t base64_to_raw(const void* base64_buffer, size_t base64_size, void* raw_buffer, size_t raw_size)
-{
-    static const unsigned char LUT[128] =
-    {
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0x3E, 0xFF, 0xFF, 0xFF, 0x3F,
-        0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B,
-        0x3C, 0x3D, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
-        0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
-        0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
-        0x17, 0x18, 0x19, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20,
-        0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
-        0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30,
-        0x31, 0x32, 0x33, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-    };
-
-    // TODO!
-    return BASE64_RESULT_OK;
-}
-
-
-base64_result_t base64_from_raw(void* base64_buffer, size_t base64_size,
-        const void* raw_buffer, size_t raw_size, const base64_options_t* options)
-{
-    static const unsigned char LUT[64] =
-    {
-        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-        'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-        'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-        'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-        'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-        'w', 'x', 'y', 'z', '0', '1', '2', '3',
-        '4', '5', '6', '7', '8', '9', '+', '/'
-    };
-
-    const unsigned char* in_i;
-    const unsigned char* in_e;
-    unsigned char* out_i;
-    unsigned line_length;
-    int with_lines = options ? options->with_lines : 0;
-    int null_terminate = options ? options->null_terminate : 0;
-
-    if ( base64_size < base64_buffer_size_from_raw_buffer_size(raw_size, options) )
-            return BASE64_RESULT_BUFFER_TOO_SMALL;
-
-    in_i = (const unsigned char*) raw_buffer;
-    in_e = in_i + raw_size;
-    out_i = (unsigned char*) base64_buffer;
-    line_length = 0;
-
-    while (in_e - in_i >= 3)
-    {
-        *out_i++ = LUT[in_i[0] >> 2u];
-        *out_i++ = LUT[((in_i[0] & 0x03u) << 4u) | (in_i[1] >> 4u)];
-        *out_i++ = LUT[((in_i[1] & 0x0fu) << 2u) | (in_i[2] >> 6u)];
-        *out_i++ = LUT[in_i[2] & 0x3Fu];
-
-        in_i += 3;
-
-        if ( with_lines )
+        if ( encoder->n_pending == 1 )
         {
-            line_length += 4;
-
-            if (line_length >= 72)
-            {
-                line_length = 0;
-                *out_i++ = '\n';
-            }
-        }
-    }
-
-    if (in_i < in_e)
-    {
-        *out_i++ = LUT[in_i[0] >> 2u];
-
-        if ( (in_e - in_i) == 1 )
-        {
-            *out_i++ = LUT[(in_i[0] & 0x03u) << 4u];
-            *out_i++ ='=';
+            *out_i++ = ENC_LUT[(pending[0] & 0x03) << 4];
+            *out_i++ = '=';
         }
         else
         {
-            *out_i++ = LUT[((in_i[0] & 0x03u) << 4u) | (in_i[1] >> 4u)];
-            *out_i++ = LUT[(in_i[1] & 0x0Fu) << 2u];
+            *out_i++ = ENC_LUT[((pending[0] & 0x03u) << 4u) | (pending[1] >> 4u)];
+            *out_i++ = ENC_LUT[(pending[1] & 0x0Fu) << 2u];
         }
 
         *out_i++ = '=';
-        line_length += 4;
+
+        encoder->line_length += 4;
     }
 
-    if ( with_lines && line_length > 0 ) *out_i++ = '\n';
-    if ( null_terminate ) *out_i = '\0';
+    if ( (encoder->options->max_line_length > 0) && (encoder->line_length > 0) ) *out_i++ = '\n';
+    if ( encoder->options->null_terminate ) *out_i++ = '\0';
+
+    return encoder->options->write_func(out, out_i - out, encoder->user_data);
+}
+
+
+static const unsigned char DEC_LUT[256] =
+{
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0x3E, 0xFF, 0xFF, 0xFF, 0x3F,
+    0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B,
+    0x3C, 0x3D, 0xFF, 0xFF, 0xFF, 0x80, 0xFF, 0xFF,
+    0xFF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+    0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+    0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+    0x17, 0x18, 0x19, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20,
+    0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+    0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30,
+    0x31, 0x32, 0x33, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+
+
+void base64_decoder_init(base64_decoder_t* decoder, const base64_decoder_options_t* options, void* user_data)
+{
+    assert(decoder);
+    assert(options);
+
+    decoder->options = options;
+    decoder->user_data = user_data;
+    decoder->n_pending = 0;
+}
+
+
+int base64_decoder_write(base64_decoder_t* decoder, const void* buffer, size_t length)
+{
+    assert(decoder);
+    assert(buffer || length == 0);
+
+    int result;
+    const uint8_t* in_i = buffer;
+    const uint8_t* in_e = in_i + length;
+    uint8_t* pending = decoder->pending;
+    uint8_t out[3];
+
+
+    while (in_i < in_e)
+    {
+        uint8_t byte = DEC_LUT[*in_i++];
+
+        if ( byte == 0xFF ) continue;
+
+        pending[decoder->n_pending++] = byte;
+
+        if ( decoder->n_pending == 4 )
+        {
+            unsigned int out_len;
+
+            if ( pending[2] == 0x80 )
+            {
+                out_len = 1;
+                pending[2] = 0x00;
+                pending[3] = 0x00;
+            }
+            else if ( pending[3] == 0x80 )
+            {
+                out_len = 2;
+                pending[3] = 0x00;
+            }
+            else
+            {
+                out_len = 3;
+            }
+
+            out[0] = (pending[0] << 2u) | (pending[1] >> 4u);
+            out[1] = (pending[1] << 4u) | (pending[2] >> 2u);
+            out[2] = (pending[2] << 6u) | pending[3];
+
+            result = decoder->options->write_func(out, out_len, decoder->user_data);
+            if ( result < 0 ) return result;
+
+            decoder->n_pending = 0;
+        }
+    }
 
     return BASE64_RESULT_OK;
+}
+
+
+int base64_decoder_finish(base64_decoder_t* decoder)
+{
+    assert(decoder);
+    return (decoder->n_pending > 0) ? BASE64_RESULT_UNEXPECTED_END_OF_INPUT : BASE64_RESULT_OK;
 }

@@ -27,33 +27,64 @@
 #define _BASE64_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 
-typedef enum
-{
-    BASE64_RESULT_OK,
-    BASE64_RESULT_BUFFER_TOO_SMALL,
-    BASE64_RESULT_INVALID_CHARACTER
+#define BASE64_RESULT_OK                         0
+#define BASE64_RESULT_UNEXPECTED_END_OF_INPUT   -1
+#define BASE64_RESULT_FIRST_USER_CODE           -100
 
-} base64_result_t;
+
+typedef int (*base64_write_func_t) (const void* buffer, size_t length, void* user_data);
 
 
 typedef struct
 {
-     int with_lines;
+    base64_write_func_t write_func;
+     unsigned int max_line_length;
      int null_terminate;
 
-} base64_options_t;
+} base64_encoder_options_t;
 
 
-size_t base64_buffer_size_to_raw_buffer_size(size_t size);
+typedef struct
+{
+    const base64_encoder_options_t* options;
+    void* user_data;
+    uint8_t pending[3];
+    int n_pending;
+    unsigned int line_length;
 
-size_t base64_buffer_size_from_raw_buffer_size(size_t size, const base64_options_t* options);
+} base64_encoder_t;
 
-base64_result_t base64_to_raw(const void* base64_buffer, size_t base64_size, void* raw_buffer, size_t raw_size);
 
-base64_result_t base64_from_raw(void* base64_buffer, size_t base64_size,
-        const void* raw_buffer, size_t raw_size,
-        const base64_options_t* options);
+typedef struct
+{
+    base64_write_func_t write_func;
+
+} base64_decoder_options_t;
+
+
+typedef struct
+{
+    const base64_decoder_options_t* options;
+    void* user_data;
+    uint8_t pending[4];
+    int n_pending;
+
+} base64_decoder_t;
+
+
+void base64_encoder_init(base64_encoder_t* encoder, const base64_encoder_options_t* options, void* user_data);
+
+int base64_encoder_write(base64_encoder_t* encoder, const void* buffer, size_t length);
+
+int base64_encoder_finish(base64_encoder_t* encoder);
+
+void base64_decoder_init(base64_decoder_t* decoder, const base64_decoder_options_t* options, void* user_data);
+
+int base64_decoder_write(base64_decoder_t* decoder, const void* buffer, size_t length);
+
+int base64_decoder_finish(base64_decoder_t* decoder);
 
 #endif /* _BASE64_H_ */
