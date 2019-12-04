@@ -21,5 +21,7 @@ int main()
     printf("%lu %lu %lu\n", in_len, out_len, strlen(out));
     printf("'%s'\n", out);
 
+    base64_buffer_size_to_raw_buffer_size(0);
+
     return 0;
 }
